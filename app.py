@@ -2,9 +2,21 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
+import time
+#from modules.graficos import crear_trayectorias
+from modules.indicadores import cargar_indicadores
+from modules.graficos import crear_dispersion
+from modules.filtros import aplicar_filtros
+from modules.config import COLUMNAS
+from modules.analisis import (
+    clasificar_cuadrantes,
+    resumen_periodo,
+    generar_hallazgos,
+)
+from modules.temporal import EstadoTemporal
 
 st.set_page_config(
-    page_title="Dashboard MacroFin",
+    page_title="Plataforma de Inteligencia para el Sistema Financiero",
     page_icon="📊",
     layout="wide"
 )
@@ -49,174 +61,376 @@ div[data-baseweb="tab-highlight"]{
 # CARGA DE DATOS
 # ==========================================
 
-@st.cache_data(ttl=300)
-def cargar_indicadores():
-
-    df = pd.read_excel(
-        "data/Base MacroFin.xlsx",
-        sheet_name="Indicadores",
-        header=4
-    )
-
-    
-    # LIMPIEZA DE DATOS
-   
-    #Rellenar fecha
-    df["Fecha"] = df["Fecha"].ffill()
-    #Rellenar fecha
-    df["Tipo Entidad"] = df["Tipo Entidad"].ffill()
-    #Remplazar depòsitos vacíos
-    df["Depósitos"] = (
-        pd.to_numeric(
-            df["Depósitos"],
-            errors="coerce"
-        )
-        .fillna(0)
-    )
-    #Convertir fecha
-    df["Fecha"] = pd.to_datetime(df["Fecha"])
-    #Convertir todas las variables numérica
-    columnas = [
-        "Cartera Bruta",
-        "Activo",
-        "Mora",
-        "Depósitos",
-        "Depósitos a Plazo",
-        "Caja de Ahorro",
-        "Indice de mora"
-    ]
-    
-    for col in columnas:
-        df[col] = pd.to_numeric(
-            df[col],
-            errors="coerce"
-        )
-    #Ordenar
-    df = df.sort_values(
-        ["Sigla","Fecha"]
-    )
-    #Tasas de crecimiento
-    df["Crecimiento Cartera"] = (
-        df.groupby("Sigla")["Cartera Bruta"]
-          .pct_change(12)
-    )
-
-    df["Crecimiento Depositos"] = (
-        df.groupby("Sigla")["Depósitos"]
-          .pct_change(12)
-    )
-    #Crear año mes
-    df["AñoMes"] = (
-        df["Fecha"]
-        .dt.strftime("%Y-%m")
-    )
-
-    return df
-
-# ==========================================
-# FUNCIONES AUXILIARES
-# ==========================================
-
-def fin_filtrar_indicadores(
-        df,
-        fecha=None,
-        tipo_entidad=None,
-        siglas=None):
-
-    datos = df.copy()
-
-    if fecha is not None:
-        datos = datos[
-            datos["Fecha"] == fecha
-        ]
-
-    if tipo_entidad is not None:
-        datos = datos[
-            datos["Tipo Entidad"].isin(tipo_entidad)
-        ]
-
-    if siglas is not None:
-        datos = datos[
-            datos["Sigla"].isin(siglas)
-        ]
-
-    return datos
-
-# ==========================================
-# DATAFRAME
-# ==========================================
-
 df_ind = cargar_indicadores()
+#periodos = sorted(df_original["AñoMes"].unique())
 
 # ==========================================
-# TITULO
+# FILTRO FECHA
 # ==========================================
 
-st.title("📊 Dashboard MacroFin")
+#fechas = sorted(
+    #df_ind["Fecha"].unique()
+#)
+
+#fecha_sel = st.sidebar.selectbox(
+
+    #"📅 Fecha",
+
+    #options=fechas,
+
+    #index=len(fechas)-1,
+
+    #format_func=lambda x: x.strftime("%d/%m/%Y")
+
+#)
+
+# ==========================================
+# FILTRO TIPO ENTIDAD
+# ==========================================
+
+tipos = sorted(
+
+    df_ind["Tipo Entidad"]
+
+    .dropna()
+
+    .unique()
+
+)
+
+tipos_sel = st.sidebar.multiselect(
+
+    "🏦 Tipo de entidad",
+
+    options=tipos,
+
+    default=tipos
+
+)
+
+# ==========================================
+# SIGLAS DISPONIBLES EN LA FECHA
+# ==========================================
+
+siglas = sorted(
+
+    df_ind[
+        df_ind["Tipo Entidad"].isin(tipos_sel)
+    ]["Sigla"]
+    .dropna()
+    .unique()
+
+)
+siglas_sel = st.sidebar.multiselect(
+
+    "🏦 Siglas",
+
+    options=siglas,
+
+    default=siglas
+
+)
+
+# ==========================================
+# TÍTULO
+# ==========================================
+
+st.title("📊 Plataforma de Inteligencia para el Sistema Financiero")
+st.markdown("---")
+
+#st.subheader("Validación de la carga de datos")
+
+
+# ==========================================
+# DATAFRAME ANÁLISIS
+# ==========================================
+
+# ==========================================
+# HISTÓRICO (SIN FILTRAR POR FECHA)
+# ==========================================
+
+df_historico = aplicar_filtros(
+    df=df_ind,
+    fecha=None,
+    tipo_entidad=tipos_sel,
+    siglas=siglas_sel
+)
+
+# ==========================================
+# ESTADO Y SESIÓN TEMPORAL
+# ==========================================
+if "indice_periodo" not in st.session_state:
+    st.session_state.indice_periodo = 0
+
+if "reproduciendo" not in st.session_state:
+    st.session_state.reproduciendo = False
+
+estado = EstadoTemporal(df_historico)
+
+estado.indice = min(
+    st.session_state.indice_periodo,
+    len(estado.periodos) - 1
+)
+
+# ==========================================
+# KPIs
+# ==========================================
+
+col1, col2, col3, col4 = st.columns(4)
+
+with col1:
+    st.metric(
+        "Registros",
+        len(df_ind)
+    )
+
+with col2:
+    st.metric(
+        "Entidades",
+        df_ind["Sigla"].nunique()
+    )
+
+with col3:
+    st.metric(
+        "Tipos de entidad",
+        df_ind["Tipo Entidad"].nunique()
+    )
+
+with col4:
+    st.metric(
+        "Meses",
+        df_ind["Fecha"].dt.to_period("M").nunique()
+    )
 
 st.markdown("---")
 
 # ==========================================
-# Posicionamiento
+# PRIMERAS FILAS
+# ==========================================
+#st.subheader("Primeras filas")
+#st.dataframe(
+    #df_ind.head(15),
+    #use_container_width=True,
+    #hide_index=True
+#)
+
+# ==========================================
+# ÚLTIMAS FILAS
+# ==========================================
+#st.subheader("Últimas filas")
+#st.dataframe(
+    #df_ind.tail(15),
+    #use_container_width=True,
+    #hide_index=True
+#)
+
+# ==========================================
+# INFORMACIÓN DEL DATAFRAME
+# ==========================================
+#with st.expander("Información del DataFrame"):
+    #st.write("Dimensiones:")
+    #st.write(df_ind.shape)
+    #st.write("Columnas:")
+    #st.write(df_ind.columns.tolist())
+    #st.write("Tipos de datos:")
+    #st.write(df_ind.dtypes)
+
+        
+# ==========================================
+# PRIMER GRÁFICO
 # ==========================================
 
-#Pestañas
-tab1 = st.tabs(
-    [
-        "🏦 Indicadores Financieros"
-    ]
-)[0]
+# ==========================================
+# PANEL TEMPORAL
+# ==========================================
 
-#Contenido
-with tab1:
+col1, col2, col3, col4, col5 = st.columns([1, 1, 4, 1, 1])
 
-    st.header("🏦 Indicadores Financieros")
+with col1:
+    btn_inicio = st.button("⏮", use_container_width=True)
 
-    #KPIs
-    col1,col2,col3,col4 = st.columns(4)
-    with col1:
-        st.metric(
-            "Registros",
-            len(df_ind)
-        )
-    
-    with col2:
-        st.metric(
-            "Entidades",
-            df_ind["Sigla"].nunique()
-        )
-    
-    with col3:
-        st.metric(
-            "Tipos de Entidad",
-            df_ind["Tipo Entidad"].nunique()
-        )
-    
-    with col4:
-        st.metric(
-            "Meses",
-            df_ind["Fecha"].dt.to_period("M").nunique()
-        )
+with col2:
+    btn_anterior = st.button("◀", use_container_width=True)
 
-    #Mostrar último mes
-    ultimo_mes = df_ind["Fecha"].max()
-    
-    df_mes = fin_filtrar_indicadores(
-        df_ind,
-        fecha=ultimo_mes
+with col3:
+    st.markdown(
+        f"<h3 style='text-align:center;'>📅 {estado.periodo_actual.strftime('%d/%m/%Y')}</h3>",
+        unsafe_allow_html=True
     )
 
-    st.markdown("---")
+with col4:
+    btn_siguiente = st.button("▶", use_container_width=True)
 
-    st.subheader(
-        f"Información correspondiente a {ultimo_mes:%m/%Y}"
+with col5:
+    btn_final = st.button("⏭", use_container_width=True)
+
+# ==========================================
+# EVENTOS PANEL TEMPORAL
+# ==========================================
+
+if btn_inicio:
+    estado.ir_al_inicio()
+    st.session_state.indice_periodo = estado.indice
+    st.rerun()
+
+if btn_anterior:
+    estado.retroceder()
+    st.session_state.indice_periodo = estado.indice
+    st.rerun()
+
+if btn_siguiente:
+    st.session_state.indice_periodo = 0
+    st.session_state.reproduciendo = True
+    st.rerun()
+#st.write(st.session_state.reproduciendo)
+
+if btn_final:
+    estado.ir_al_final()
+    st.session_state.indice_periodo = estado.indice
+    st.rerun()
+
+# ==========================================
+# REPRODUCCIÓN AUTOMÁTICA
+# ==========================================
+
+if st.session_state.reproduciendo:
+    time.sleep(0.5)  # Ajusta la velocidad
+
+    if estado.indice < len(estado.periodos) - 1:
+        estado.avanzar()
+        st.session_state.indice_periodo = estado.indice
+        st.rerun()
+
+    else:
+        st.session_state.reproduciendo = False
+        st.rerun()
+        
+df_filtrado = estado.datos_actuales()
+
+#temporal
+print(df_historico["Fecha"].unique())
+
+df_analisis = clasificar_cuadrantes(
+    df_filtrado,
+    eje_x="Crecimiento Cartera",
+    eje_y="Indice de mora"
+)
+resumen = resumen_periodo(df_analisis)
+hallazgos = generar_hallazgos(df_analisis)
+st.subheader("🧠 Panel del Analista")
+
+for h in hallazgos:
+
+    st.info(
+
+        f"**{h['titulo']}**\n\n"
+
+        f"{h['mensaje']}"
+
     )
-    
-    st.dataframe(
-        df_mes,
-        use_container_width=True,
-        hide_index=True
+
+fig = crear_dispersion(
+    df=df_analisis,
+    df_historico=df_historico,
+    eje_x="Crecimiento Cartera",
+    eje_y="Indice de mora",
+    tamaño="10. Activo",
+    color="Tipo Entidad",
+    texto=COLUMNAS["sigla"],
+    titulo="Crecimiento Anual de Cartera vs Índice de Mora",
+    fecha_actual=estado.periodo_actual  # Se envía la fecha seleccionada
+)
+
+st.plotly_chart(
+    fig,
+    use_container_width=True
+)
+
+st.subheader("📌 Resumen del período")
+
+#st.write(type(resumen))
+#st.write(resumen)
+
+for fila in resumen:
+
+    st.write(
+
+        f"• {fila['Cantidad']} entidades "
+
+        f"({fila['Porcentaje']:.1f}%) "
+
+        f"se encuentran en "
+
+        f"**{fila['Estado']}**."
+
     )
+
+#st.markdown("---")
+
+#st.subheader("📈 Evolución Histórica de las Entidades")
+
+#fig_tray = crear_trayectorias(
+    #df=df_ind,
+    #eje_x="Crecimiento Cartera",
+    #eje_y="Indice de mora",
+    #color="Sigla",
+    #texto="Sigla",
+    #titulo=""
+#)
+
+#st.plotly_chart(
+    #fig_tray,
+    #use_container_width=True
+#)
+
+# ==========================================
+# TEMPORAL
+# ==========================================
+#st.subheader("Validación gráfico")
+
+#st.write(df_ind[
+    #[
+        #"Sigla",
+        #"Crecimiento Cartera",
+        #"Indice de mora",
+        #"10. Activo"
+    #]
+#].tail(20))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
