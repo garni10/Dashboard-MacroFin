@@ -10,7 +10,6 @@ import plotly.graph_objects as go
 from modules.config import (
     TAM_BURBUJA,
     POSICION_CUADRANTES,
-    TRAYECTORIA,
     COLORES
 )
 
@@ -81,7 +80,6 @@ def crear_dispersion(
     mostrar_cuadrantes=True,
     mostrar_trayectorias=False
 ):
-    # Definir ejes según todo el conjunto de datos válidos
     df_validos_hist = df_historico.dropna(subset=[eje_x, eje_y])
     
     xmin, xmax = df_validos_hist[eje_x].min(), df_validos_hist[eje_x].max()
@@ -120,6 +118,19 @@ def crear_dispersion(
         range_y=[ymin_view, ymax_view]
     )
 
+    # MARCA DE AGUA FECHA ESTILO POWER BI (Esquina superior derecha)
+    if fecha_actual is not None:
+        fig.add_annotation(
+            x=0.98,
+            y=0.75,
+            xref="paper",
+            yref="paper",
+            text=f"<b>{fecha_actual.strftime('%Y-%m')}</b>",
+            showarrow=False,
+            font=dict(size=44, color="rgba(255, 255, 255, 0.25)"),
+            align="right"
+        )
+
     # Líneas de promedios con etiquetas numéricas
     if mostrar_promedios and not np.isnan(promedio_x) and not np.isnan(promedio_y):
         fig.add_vline(x=promedio_x, line_width=1.5, line_dash="dot", line_color="#4FC3F7")
@@ -143,8 +154,6 @@ def crear_dispersion(
     )
 
     return estilo_dashboard(fig)
-
-
 
 
 
