@@ -177,7 +177,38 @@ def generar_hallazgos(df):
 
     return hallazgos
 
+# ----------------------------------
+# SISTEMA FINANCIERO
+# ----------------------------------
 
+import numpy as np
+
+def agregar_promedio_sistema(df_actual, df_base_tipos):
+    """
+    Calcula el promedio del sistema considerando los 'Tipos de entidad' seleccionados
+    (ignora el filtro de Siglas para reflejar la media real del sector).
+    """
+    if df_base_tipos.empty:
+        return df_actual
+
+    # Columnas numéricas a promediar
+    cols_num = df_base_tipos.select_dtypes(include=["number"]).columns
+    
+    # Promedio ponderado o simple de las variables clave del día
+    promedios = df_base_tipos[cols_num].mean().to_dict()
+    
+    # Creamos la fila del Promedio del Sistema
+    fila_promedio = {
+        "Fecha": df_actual["Fecha"].iloc[0] if not df_actual.empty else None,
+        "Tipo Entidad": "PROMEDIO SISTEMA",
+        "Sigla": "SISTEMA",
+        **promedios
+    }
+    
+    df_prom = pd.DataFrame([fila_promedio])
+    
+    # Concatenamos la fila al dataset actual
+    return pd.concat([df_actual, df_prom], ignore_index=True)
 
 
 

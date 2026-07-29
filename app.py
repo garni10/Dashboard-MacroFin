@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import time
 
-from modules.indicadores import cargar_indicadores
+from modules.indicadores import cargar_indicadores, cargar_indicadores_diarios
 from modules.graficos import crear_dispersion
 from modules.filtros import aplicar_filtros
 from modules.config import COLUMNAS
@@ -11,7 +11,9 @@ from modules.analisis import (
     clasificar_cuadrantes,
     resumen_periodo,
 )
-from modules.temporal import EstadoTemporal
+from modules.temporal import EstadoTemporal, EstadoTemporalDiario
+from modules.analisis import agregar_promedio_sistema
+
 
 st.set_page_config(
     page_title="Plataforma de Inteligencia para el Sistema Financiero",
@@ -26,8 +28,8 @@ st.markdown("""
 div[data-baseweb="tab-list"]{ gap:20px; }
 
 /* Pestañas */
-button[data-baseweb="tab"]{ font-size:26px !important; font-weight:700 !important; padding:14px 28px !important; height:60px !important; }
-button[data-baseweb="tab"] p{ font-size:26px !important; font-weight:700 !important; }
+button[data-baseweb="tab"]{ font-size:22px !important; font-weight:700 !important; padding:12px 24px !important; }
+button[data-baseweb="tab"] p{ font-size:22px !important; font-weight:700 !important; }
 button[data-baseweb="tab"][aria-selected="true"]{ color:#4FC3F7 !important; }
 div[data-baseweb="tab-highlight"]{ height:4px; }
 
@@ -42,153 +44,229 @@ div[data-baseweb="tab-highlight"]{ height:4px; }
 """, unsafe_allow_html=True)
 
 # ==========================================
-# CARGA DE DATOS
+# CARGA DE DATOS (MENSUAL Y DIARIO)
 # ==========================================
-df_ind = cargar_indicadores()
+df_ind_mensual = cargar_indicadores()
+df_ind_diario = cargar_indicadores_diarios()
 
 # ==========================================
-# FILTROS LATERALES (SIDEBAR)
+# FILTROS LATERALES COMPARTIDOS (SIDEBAR)
 # ==========================================
-tipos = sorted(df_ind["Tipo Entidad"].dropna().unique())
+# Se obtienen tipos y siglas combinados de ambos datasets
+tipos = sorted(list(set(df_ind_mensual["Tipo Entidad"].dropna().unique()).union(set(df_ind_diario["Tipo Entidad"].dropna().unique()))))
 tipos_sel = st.sidebar.multiselect("🏦 Tipo de entidad", options=tipos, default=tipos)
 
-siglas = sorted(df_ind[df_ind["Tipo Entidad"].isin(tipos_sel)]["Sigla"].dropna().unique())
+siglas_m = df_ind_mensual[df_ind_mensual["Tipo Entidad"].isin(tipos_sel)]["Sigla"].dropna().unique()
+siglas_d = df_ind_diario[df_ind_diario["Tipo Entidad"].isin(tipos_sel)]["Sigla"].dropna().unique()
+siglas = sorted(list(set(siglas_m).union(set(siglas_d))))
+
 siglas_sel = st.sidebar.multiselect("🏦 Siglas", options=siglas, default=siglas)
 
-# Histórico filtrado
-df_historico = aplicar_filtros(
-    df=df_ind,
-    fecha=None,
-    tipo_entidad=tipos_sel,
-    siglas=siglas_sel
-)
-
-estado = EstadoTemporal(df_historico)
-
 # ==========================================
-# CONTROL DE ESTADO EN SESSION
-# ==========================================
-if "indice_periodo" not in st.session_state:
-    st.session_state.indice_periodo = 0
-
-if "reproduciendo" not in st.session_state:
-    st.session_state.reproduciendo = False
-
-# Ajustar índice dentro de rangos válidos
-if estado.periodos:
-    st.session_state.indice_periodo = max(0, min(st.session_state.indice_periodo, len(estado.periodos) - 1))
-    estado.indice = st.session_state.indice_periodo
-
-# ==========================================
-# TÍTULO E KPIs
+# TÍTULO PRINCIPAL
 # ==========================================
 st.title("📊 Plataforma de Inteligencia para el Sistema Financiero")
 st.markdown("---")
 
-col1, col2, col3, col4 = st.columns(4)
-with col1:
-    st.metric("Registros", len(df_ind))
-with col2:
-    st.metric("Entidades", df_ind["Sigla"].nunique())
-with col3:
-    st.metric("Tipos de entidad", df_ind["Tipo Entidad"].nunique())
-with col4:
-    st.metric("Meses", len(estado.periodos))
-
-st.markdown("---")
+# CREACIÓN DE PESTAÑAS (MENSUAL / DIARIO)
+tab_mensual, tab_diario = st.tabs(["📅 Visión Mensual", "📆 Visión Diaria (2026)"])
 
 # ==========================================
-# DATOS DEL PERÍODO ACTUAL
+# PESTAÑA 1: VISIÓN MENSUAL
 # ==========================================
-df_filtrado = estado.datos_actuales()
+with tab_mensual:
+    df_hist_m = aplicar_filtros(df=df_ind_mensual, fecha=None, tipo_entidad=tipos_sel, siglas=siglas_sel)
+    estado_m = EstadoTemporal(df_hist_m)
 
-# ==========================================
-# CÁLCULOS Y GRÁFICOS DINÁMICOS
-# ==========================================
-if not df_filtrado.empty:
-    df_analisis = clasificar_cuadrantes(
-        df_filtrado,
-        eje_x="Crecimiento Cartera",
-        eje_y="Indice de mora"
-    )
+    if "idx_mensual" not in st.session_state:
+        st.session_state.idx_mensual = 0
+    if "play_mensual" not in st.session_state:
+        st.session_state.play_mensual = False
 
-    resumen = resumen_periodo(df_analisis)
+    if estado_m.periodos:
+        st.session_state.idx_mensual = max(0, min(st.session_state.idx_mensual, len(estado_m.periodos) - 1))
+        estado_m.indice = st.session_state.idx_mensual
 
-    # Gráfico de dispersión
-    fig = crear_dispersion(
-        df=df_analisis,
-        df_historico=df_historico,
-        eje_x="Crecimiento Cartera",
-        eje_y="Indice de mora",
-        tamaño="10. Activo",
-        color="Tipo Entidad",
-        texto=COLUMNAS["sigla"],
-        titulo="Crecimiento Anual de Cartera vs Índice de Mora",
-        fecha_actual=estado.periodo_actual,
-        mostrar_trayectorias=False
-    )
+    # KPIs Mensual
+    col1, col2, col3, col4 = st.columns(4)
+    with col1: st.metric("Registros", len(df_hist_m))
+    with col2: st.metric("Entidades", df_hist_m["Sigla"].nunique())
+    with col3: st.metric("Tipos de entidad", len(tipos_sel))
+    with col4: st.metric("Meses", len(estado_m.periodos))
+    st.markdown("---")
 
-    st.plotly_chart(fig, use_container_width=True)
+    df_filtrado_m = estado_m.datos_actuales()
 
-    # ==========================================
-    # EJE DE REPRODUCCIÓN POWER BI (PLAY + SLIDER)
-    # ==========================================
-    col_play, col_slider = st.columns([1, 11])
+    if not df_filtrado_m.empty:
+        # 1. Obtener datos completos del mes para los tipos de entidad seleccionados (benchmark del sector)
+        df_base_mes = df_ind_mensual[
+            (df_ind_mensual["Fecha"] == estado_m.periodo_actual) & 
+            (df_ind_mensual["Tipo Entidad"].isin(tipos_sel))
+        ]
+        
+        # 2. Calcular los promedios del sector para posicionar las líneas de los ejes
+        prom_x_m = df_base_mes["Crecimiento Cartera"].mean() if not df_base_mes.empty else None
+        prom_y_m = df_base_mes["Indice de mora"].mean() if not df_base_mes.empty else None
 
-    with col_play:
-        btn_label = "⏸" if st.session_state.reproduciendo else "▶"
-        if st.button(btn_label, use_container_width=True, key="btn_play_pbi"):
-            if st.session_state.reproduciendo:
-                st.session_state.reproduciendo = False
-            else:
-                # Si llega al final y le da Play, inicia desde el primer dato
-                if st.session_state.indice_periodo >= len(estado.periodos) - 1:
-                    st.session_state.indice_periodo = 0
-                st.session_state.reproduciendo = True
-            st.rerun()
+        # 3. Clasificar entidades filtradas y crear el gráfico
+        df_analisis_m = clasificar_cuadrantes(df_filtrado_m, eje_x="Crecimiento Cartera", eje_y="Indice de mora")
+        
+        fig_m = crear_dispersion(
+            df=df_analisis_m, 
+            df_historico=df_hist_m,
+            eje_x="Crecimiento Cartera", 
+            eje_y="Indice de mora",
+            tamaño="10. Activo", 
+            color="Tipo Entidad", 
+            texto=COLUMNAS["sigla"],
+            titulo="Mensual: Crecimiento Anual de Cartera vs Índice de Mora",
+            fecha_actual=estado_m.periodo_actual, 
+            mostrar_trayectorias=False,
+            # Pasamos los promedios del sector para las líneas cruzadas:
+            prom_x_custom=prom_x_m,
+            prom_y_custom=prom_y_m
+        )
+        st.plotly_chart(fig_m, use_container_width=True)
 
-    with col_slider:
-        if estado.periodos:
-            # Slider para manipular exactamente el punto del tiempo
-            fecha_slider = st.select_slider(
-                "Periodo",
-                options=estado.periodos,
-                value=estado.periodos[st.session_state.indice_periodo],
-                format_func=lambda x: x.strftime("%Y-%m"),
-                key="slider_eje_reproduccion",
-                label_visibility="collapsed"
-            )
-
-            # Si el usuario desplaza el slider manualmente
-            idx_slider = estado.periodos.index(fecha_slider)
-            if idx_slider != st.session_state.indice_periodo and not st.session_state.reproduciendo:
-                st.session_state.indice_periodo = idx_slider
+        # Reproductor Mensual
+        c_play, c_slider = st.columns([1, 11])
+        with c_play:
+            btn_lbl = "⏸" if st.session_state.play_mensual else "▶"
+            if st.button(btn_lbl, key="play_m", use_container_width=True):
+                if st.session_state.play_mensual:
+                    st.session_state.play_mensual = False
+                else:
+                    if st.session_state.idx_mensual >= len(estado_m.periodos) - 1:
+                        st.session_state.idx_mensual = 0
+                    st.session_state.play_mensual = True
                 st.rerun()
 
-    # ==========================================
-    # RESUMEN DEL PERÍODO
-    # ==========================================
-    st.subheader("🧠 Resumen del período")
-    for fila in resumen:
-        st.write(
-            f"• {fila['Cantidad']} entidades "
-            f"({fila['Porcentaje']:.1f}%) "
-            f"se encuentran en **{fila['Estado']}**."
-        )
-else:
-    st.warning("No hay datos suficientes para mostrar en este período.")
+        with c_slider:
+            if estado_m.periodos:
+                f_sl = st.select_slider(
+                    "P_M", options=estado_m.periodos,
+                    value=estado_m.periodos[st.session_state.idx_mensual],
+                    format_func=lambda x: x.strftime("%Y-%m"),
+                    key="sl_m", label_visibility="collapsed"
+                )
+                idx_s = estado_m.periodos.index(f_sl)
+                if idx_s != st.session_state.idx_mensual and not st.session_state.play_mensual:
+                    st.session_state.idx_mensual = idx_s
+                    st.rerun()
+
+        st.subheader("🧠 Resumen del período")
+        for fila in resumen_periodo(df_analisis_m):
+            st.write(f"• {fila['Cantidad']} entidades ({fila['Porcentaje']:.1f}%) en **{fila['Estado']}**.")
+    else:
+        st.warning("No hay datos mensuales para los filtros seleccionados.")
+
+    if st.session_state.play_mensual:
+        time.sleep(0.3)
+        if st.session_state.idx_mensual < len(estado_m.periodos) - 1:
+            st.session_state.idx_mensual += 1
+            st.rerun()
+        else:
+            st.session_state.play_mensual = False
+            st.rerun()
+
 
 # ==========================================
-# CICLO AUTO-AVANCE (ANIMACIÓN)
+# PESTAÑA 2: VISIÓN DIARIA (2026)
 # ==========================================
-if st.session_state.reproduciendo:
-    time.sleep(0.3)
-    if st.session_state.indice_periodo < len(estado.periodos) - 1:
-        st.session_state.indice_periodo += 1
-        st.rerun()
+with tab_diario:
+    df_hist_d = aplicar_filtros(df=df_ind_diario, fecha=None, tipo_entidad=tipos_sel, siglas=siglas_sel)
+    estado_d = EstadoTemporalDiario(df_hist_d)
+
+    if "idx_diario" not in st.session_state:
+        st.session_state.idx_diario = 0
+    if "play_diario" not in st.session_state:
+        st.session_state.play_diario = False
+
+    if estado_d.periodos:
+        st.session_state.idx_diario = max(0, min(st.session_state.idx_diario, len(estado_d.periodos) - 1))
+        estado_d.indice = st.session_state.idx_diario
+
+    # KPIs Diario
+    col1, col2, col3, col4 = st.columns(4)
+    with col1: st.metric("Registros", len(df_hist_d))
+    with col2: st.metric("Entidades", df_hist_d["Sigla"].nunique())
+    with col3: st.metric("Tipos de entidad", len(tipos_sel))
+    with col4: st.metric("Días (2026)", len(estado_d.periodos))
+    st.markdown("---")
+
+    df_filtrado_d = estado_d.datos_actuales()
+
+    if not df_filtrado_d.empty:
+        # 1. Obtener datos completos del día para los tipos de entidad seleccionados (benchmark del sector)
+        df_base_dia = df_ind_diario[
+            (df_ind_diario["Fecha"] == estado_d.periodo_actual) & 
+            (df_ind_diario["Tipo Entidad"].isin(tipos_sel))
+        ]
+        
+        # 2. Calcular los promedios del sector para posicionar las líneas de los ejes
+        prom_x_d = df_base_dia["Crecimiento Cartera"].mean() if not df_base_dia.empty else None
+        prom_y_d = df_base_dia["Indice de mora"].mean() if not df_base_dia.empty else None
+
+        # 3. Clasificar entidades filtradas y crear el gráfico
+        df_analisis_d = clasificar_cuadrantes(df_filtrado_d, eje_x="Crecimiento Cartera", eje_y="Indice de mora")
+        
+        fig_d = crear_dispersion(
+            df=df_analisis_d, 
+            df_historico=df_hist_d,
+            eje_x="Crecimiento Cartera", 
+            eje_y="Indice de mora",
+            tamaño="10. Activo", 
+            color="Tipo Entidad", 
+            texto=COLUMNAS["sigla"],
+            titulo="Diario: Crecimiento Anual de Cartera vs Índice de Mora (2026)",
+            fecha_actual=estado_d.periodo_actual, 
+            mostrar_trayectorias=False,
+            # Pasamos los promedios del sector para las líneas cruzadas:
+            prom_x_custom=prom_x_d,
+            prom_y_custom=prom_y_d
+        )
+        st.plotly_chart(fig_d, use_container_width=True)
+
+        # Reproductor Diario
+        c_play_d, c_slider_d = st.columns([1, 11])
+        with c_play_d:
+            btn_lbl_d = "⏸" if st.session_state.play_diario else "▶"
+            if st.button(btn_lbl_d, key="play_d", use_container_width=True):
+                if st.session_state.play_diario:
+                    st.session_state.play_diario = False
+                else:
+                    if st.session_state.idx_diario >= len(estado_d.periodos) - 1:
+                        st.session_state.idx_diario = 0
+                    st.session_state.play_diario = True
+                st.rerun()
+
+        with c_slider_d:
+            if estado_d.periodos:
+                f_sl_d = st.select_slider(
+                    "P_D", options=estado_d.periodos,
+                    value=estado_d.periodos[st.session_state.idx_diario],
+                    format_func=lambda x: x.strftime("%d/%m/%Y"),
+                    key="sl_d", label_visibility="collapsed"
+                )
+                idx_s_d = estado_d.periodos.index(f_sl_d)
+                if idx_s_d != st.session_state.idx_diario and not st.session_state.play_diario:
+                    st.session_state.idx_diario = idx_s_d
+                    st.rerun()
+
+        st.subheader("🧠 Resumen del período")
+        for fila in resumen_periodo(df_analisis_d):
+            st.write(f"• {fila['Cantidad']} entidades ({fila['Porcentaje']:.1f}%) en **{fila['Estado']}**.")
     else:
-        st.session_state.reproduciendo = False
-        st.rerun()
+        st.warning("No hay datos diarios para los filtros seleccionados o el período activo.")
+
+    if st.session_state.play_diario:
+        time.sleep(0.08)  # Velocidad ajustada a iteración diaria
+        if st.session_state.idx_diario < len(estado_d.periodos) - 1:
+            st.session_state.idx_diario += 1
+            st.rerun()
+        else:
+            st.session_state.play_diario = False
+            st.rerun()
 
 
 

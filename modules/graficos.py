@@ -67,19 +67,22 @@ def estilo_dashboard(fig):
     return fig
 
 def crear_dispersion(
-    df,
-    df_historico,
-    eje_x,
-    eje_y,
-    tamaño,
-    color,
-    texto,
-    titulo,
-    fecha_actual,
-    mostrar_promedios=True,
-    mostrar_cuadrantes=True,
-    mostrar_trayectorias=False
+    df, 
+    df_historico, 
+    eje_x, 
+    eje_y, 
+    tamaño, 
+    color, 
+    texto, 
+    titulo, 
+    fecha_actual=None, 
+    mostrar_trayectorias=False,
+    mostrar_promedios=True,       # Parámetro para las líneas del promedio
+    mostrar_cuadrantes=True,      # Parámetro para las etiquetas de los cuadrantes
+    prom_x_custom=None,
+    prom_y_custom=None
 ):
+    
     df_validos_hist = df_historico.dropna(subset=[eje_x, eje_y])
     
     xmin, xmax = df_validos_hist[eje_x].min(), df_validos_hist[eje_x].max()
@@ -91,9 +94,17 @@ def crear_dispersion(
     xmin_view, xmax_view = xmin - pad_x, xmax + pad_x
     ymin_view, ymax_view = ymin - pad_y, ymax + pad_y
 
-    promedio_x = df[eje_x].mean()
-    promedio_y = df[eje_y].mean()
+    promedio_x = prom_x_custom if prom_x_custom is not None else df[eje_x].mean()
+    promedio_y = prom_y_custom if prom_y_custom is not None else df[eje_y].mean()
 
+    # Mapa de colores fijo por Tipo de Entidad para evitar cambios en la leyenda al animar
+    MAPA_COLORES = {
+        "BANCOS MULTIPLES": "#5C6BC0",                         # Azul / Morado
+        "ENTIDADES ESPECIALIZADAS EN MICROCRÉDITO": "#FF7043", # Naranja / Coral
+        "INSTITUCIONES FINANCIERAS DE DESARROLLO": "#26A69A", # Verde Agua
+        "COOPERATIVAS": "#AB47BC"                              # Púrpura / Violeta
+    }
+    
     fig = px.scatter(
         data_frame=df,
         x=eje_x,
@@ -111,6 +122,10 @@ def crear_dispersion(
             "Crecimiento Cartera": ":.2f",
             "Indice de mora": ":.2f"
         },
+        # --- AJUSTES DE COLOR Y ORDEN FIJO ---
+        color_discrete_map=MAPA_COLORES,
+        category_orders={color: sorted(list(MAPA_COLORES.keys()))},
+        # -----------------------------------
         size_max=TAM_BURBUJA,
         template="plotly_white",
         title=titulo,
@@ -118,16 +133,25 @@ def crear_dispersion(
         range_y=[ymin_view, ymax_view]
     )
 
-    # MARCA DE AGUA FECHA ESTILO POWER BI (Esquina superior derecha)
+    # MARCA DE AGUA FECHA ESTILO POWER BI
     if fecha_actual is not None:
+        # Formato de la fecha según el tipo
+        if isinstance(fecha_actual, (pd.Timestamp, str)):
+            fecha_str = str(fecha_actual)[:10]
+        else:
+            # Es un objeto datetime.date
+            fecha_str = fecha_actual.strftime("%d/%m/%Y")
+
         fig.add_annotation(
             x=0.98,
-            y=0.75,
+            y=0.70,
             xref="paper",
             yref="paper",
-            text=f"<b>{fecha_actual.strftime('%Y-%m')}</b>",
+            xanchor="right",
+            yanchor="top",
+            text=f"<b>{fecha_str}</b>",
             showarrow=False,
-            font=dict(size=44, color="rgba(255, 255, 255, 0.25)"),
+            font=dict(size=40, color="rgba(255, 255, 255, 0.22)"),
             align="right"
         )
 
@@ -152,7 +176,7 @@ def crear_dispersion(
         mode="markers",
         marker=dict(opacity=0.8, line=dict(width=1, color="black"))
     )
-
+    
     return estilo_dashboard(fig)
 
 

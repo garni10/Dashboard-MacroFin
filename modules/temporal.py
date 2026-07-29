@@ -61,7 +61,29 @@ class EstadoTemporal:
         self.indice = max(0, len(self.periodos) - 1)
         return self.periodo_actual
 
+class EstadoTemporalDiario:
+    def __init__(self, df):
+        self.df = df
+        
+        if not df.empty and "Fecha" in df.columns:
+            # Obtener únicamente las fechas de 2026 que tienen datos calculados válidos
+            todas_las_fechas = sorted(df["Fecha"].dropna().unique())
+            self.periodos = [f for f in todas_las_fechas if f.year == 2026]
+        else:
+            self.periodos = []
+            
+        self.indice = 0
 
+    @property
+    def periodo_actual(self):
+        if not self.periodos:
+            return None
+        return self.periodos[self.indice]
+
+    def datos_actuales(self):
+        if self.periodo_actual is None:
+            return self.df.iloc[0:0]
+        return self.df[self.df["Fecha"] == self.periodo_actual].copy()
 
 
 
