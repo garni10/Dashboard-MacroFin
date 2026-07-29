@@ -28,8 +28,8 @@ st.markdown("""
 div[data-baseweb="tab-list"]{ gap:20px; }
 
 /* Pestañas */
-button[data-baseweb="tab"]{ font-size:22px !important; font-weight:700 !important; padding:12px 24px !important; }
-button[data-baseweb="tab"] p{ font-size:22px !important; font-weight:700 !important; }
+button[data-baseweb="tab"]{ font-size:42px !important; font-weight:700 !important; padding:12px 24px !important; }
+button[data-baseweb="tab"] p{ font-size:42px !important; font-weight:700 !important; }
 button[data-baseweb="tab"][aria-selected="true"]{ color:#4FC3F7 !important; }
 div[data-baseweb="tab-highlight"]{ height:4px; }
 
