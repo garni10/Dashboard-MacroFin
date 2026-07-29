@@ -25,13 +25,35 @@ st.markdown("""
 <style>
 
 /* Contenedor de pestañas */
-div[data-baseweb="tab-list"]{ gap:20px; }
+div[data-baseweb="tab-list"] {
+    gap: 24px !important;
+}
 
-/* Pestañas */
-button[data-baseweb="tab"]{ font-size:42px !important; font-weight:700 !important; padding:12px 24px !important; }
-button[data-baseweb="tab"] p{ font-size:42px !important; font-weight:700 !important; }
-button[data-baseweb="tab"][aria-selected="true"]{ color:#4FC3F7 !important; }
-div[data-baseweb="tab-highlight"]{ height:4px; }
+/* Pestañas (Botón e hijos de texto) */
+button[data-baseweb="tab"] {
+    font-size: 26px !important; /* Puedes subirlo a 28px o 30px si lo quieres aún más grande */
+    font-weight: 700 !important;
+    padding: 14px 28px !important;
+}
+
+/* Forzar tamaño de texto interno en Streamlit Cloud (p, div, span) */
+button[data-baseweb="tab"] p, 
+button[data-baseweb="tab"] div, 
+button[data-baseweb="tab"] span,
+button[data-baseweb="tab"] [data-testid="stMarkdownContainer"] p {
+    font-size: 26px !important;
+    font-weight: 700 !important;
+}
+
+/* Pestaña seleccionada e indicador */
+button[data-baseweb="tab"][aria-selected="true"] {
+    color: #4FC3F7 !important;
+}
+
+div[data-baseweb="tab-highlight"] {
+    height: 4px !important;
+    background-color: #4FC3F7 !important;
+}
 
 /* Estilo para alineación del botón Play/Pausa con el Slider */
 .stButton > button {
