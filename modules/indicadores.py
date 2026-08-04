@@ -101,14 +101,19 @@ def cargar_indicadores():
           * 100
     )
 
-    # --------------------------------------
-    # Crecimiento anual depósitos
-    # --------------------------------------
-    df[COLUMNAS["crecimiento_depositos"]] = (
-        df.groupby(COLUMNAS["sigla"])[COLUMNAS["depositos"]]
-          .pct_change(12)
-          * 100
-    )
+    # CÁLCULO DE CRECIMIENTO ANUAL DE DEPÓSITOS (MENSUAL)
+    # Detectamos el nombre de la columna de depósitos
+    col_dep = "6. Depósitos del Público" if "6. Depósitos del Público" in df.columns else "Depósitos del Público"
+
+    if col_dep in df.columns:
+        # Ordenamos por entidad y fecha
+        df = df.sort_values(["Sigla", "Fecha"]).reset_index(drop=True)
+    
+        # Calculamos la variación porcentual respecto al mismo mes del año anterior (shift de 12 meses)
+        df["Crecimiento Depósitos"] = df.groupby("Sigla")[col_dep].pct_change(12) * 100
+        df["Crecimiento Depósitos"] = df["Crecimiento Depósitos"].fillna(0.0)
+    else:
+        df["Crecimiento Depósitos"] = 0.0
 
     # --------------------------------------
     # AñoMes
@@ -159,25 +164,46 @@ def cargar_indicadores_diarios():
     # 4. CÁLCULO DE VARIACIÓN ANUAL (Mismo orden diario de 2026 vs 2025)
     # Separamos 2025 y 2026 para cada Entidad
     dfs_procesados = []
-    
+        
     for sigla, df_grupo in df.groupby("Sigla"):
         df_grupo = df_grupo.sort_values("Fecha").copy()
-        
+            
         # Filtramos por año
-        df_2025 = df_grupo[df_grupo["Fecha"].apply(lambda x: x.year == 2025)].reset_index(drop=True)
-        df_2026 = df_grupo[df_grupo["Fecha"].apply(lambda x: x.year == 2026)].reset_index(drop=True)
-        
-        if not df_2026.empty and not df_2025.empty:
-            # Asociamos por el número de día observado en la serie (día 1 de 2026 vs día 1 de 2025)
-            # Esto evita fallos si un año tiene días festivos o bisiestos diferentes.
-            df_2026["Crecimiento Cartera"] = np.where(
-                (df_2026.index < len(df_2025)) & (df_2025.loc[df_2026.index[:len(df_2025)], "1. Cartera Bruta"].values > 0),
-                ((df_2026["1. Cartera Bruta"] - df_2025.loc[df_2026.index[:len(df_2025)], "1. Cartera Bruta"].values) / 
-                 df_2025.loc[df_2026.index[:len(df_2025)], "1. Cartera Bruta"].values) * 100,
-                0
-            )
-        else:
-            df_2026["Crecimiento Cartera"] = 0
+        df_2025 = df_grupo[df_grupo["Fecha"].apply(lambda x: getattr(x, "year", None) == 2025)].reset_index(drop=True)
+        df_2026 = df_grupo[df_grupo["Fecha"].apply(lambda x: getattr(x, "year", None) == 2026)].reset_index(drop=True)
+            
+        if not df_2026.empty:
+            # Inicializamos las columnas de variación en 0.0
+            df_2026["Crecimiento Cartera"] = 0.0
+            df_2026["Crecimiento Depósitos"] = 0.0
+                
+            if not df_2025.empty:
+                n_min = min(len(df_2026), len(df_2025))
+                    
+                if n_min > 0:
+                    # --- 1. CARTERA BRUTA ---
+                    v_cart_2026 = df_2026.loc[:n_min - 1, "1. Cartera Bruta"].values
+                    v_cart_2025 = df_2025.loc[:n_min - 1, "1. Cartera Bruta"].values
+                    mask_cart = v_cart_2025 > 0
+                        
+                    var_cart = np.zeros(n_min)
+                    var_cart[mask_cart] = ((v_cart_2026[mask_cart] - v_cart_2025[mask_cart]) / v_cart_2025[mask_cart]) * 100
+                    df_2026.loc[:n_min - 1, "Crecimiento Cartera"] = var_cart
+
+                    # --- 2. DEPÓSITOS DEL PÚBLICO ---
+                    # Ajusta el nombre exacto de la columna en tu Excel si difiere (ej. "6. Depósitos del Público")
+                    col_dep = "6. Depósitos del Público" if "6. Depósitos del Público" in df_2026.columns else "Depósitos del Público"
+                        
+                    if col_dep in df_2026.columns:
+                        v_dep_2026 = df_2026.loc[:n_min - 1, col_dep].values
+                        v_dep_2025 = df_2025.loc[:n_min - 1, col_dep].values
+                        mask_dep = v_dep_2025 > 0
+                            
+                        var_dep = np.zeros(n_min)
+                        var_dep[mask_dep] = ((v_dep_2026[mask_dep] - v_dep_2025[mask_dep]) / v_dep_2025[mask_dep]) * 100
+                        df_2026.loc[:n_min - 1, "Crecimiento Depósitos"] = var_dep
+                    else:
+                        df_2026["Crecimiento Depósitos"] = 0.0
             
         dfs_procesados.append(pd.concat([df_2025, df_2026]))
 
@@ -188,8 +214,6 @@ def cargar_indicadores_diarios():
 
     df_final = df_final.sort_values("Fecha").reset_index(drop=True)
     return df_final
-
-
 
 
 

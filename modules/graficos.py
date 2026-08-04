@@ -13,33 +13,27 @@ from modules.config import (
     COLORES
 )
 
-def agregar_cuadrantes(fig, xmin, xmax, ymin, ymax):
-    def calcular_posicion(rx, ry):
-        x = xmin + (xmax - xmin) * rx
-        y = ymin + (ymax - ymin) * ry
-        return x, y
+def agregar_cuadrantes(fig, xmin, xmax, ymin, ymax, eje_y="Indice de mora"):
+    """
+    Agrega las marcas de agua con los nombres de los cuadrantes en las esquinas.
+    """
+    # Lógica para definir las etiquetas según el Eje Y
+    if eje_y == "Indice de mora":
+        label_q1 = "Crecimiento con Riesgo"  # Superior Derecho
+        label_q2 = "Riesgo"                 # Superior Izquierdo
+        label_q3 = "Conservador"            # Inferior Izquierdo
+        label_q4 = "Liderazgo"              # Inferior Derecho
+    else:
+        label_q1 = "Liderazgo"              # Superior Derecho
+        label_q2 = "Captador / Expansivo"   # Superior Izquierdo
+        label_q3 = "Rezago / Estancado"     # Inferior Izquierdo
+        label_q4 = "Otorgador / Descalce"   # Inferior Derecho
 
-    x_riesgo, y_riesgo = calcular_posicion(*POSICION_CUADRANTES["Riesgo"])
-    x_crecimiento, y_crecimiento = calcular_posicion(*POSICION_CUADRANTES["Crecimiento con Riesgo"])
-    x_conservador, y_conservador = calcular_posicion(*POSICION_CUADRANTES["Conservador"])
-    x_liderazgo, y_liderazgo = calcular_posicion(*POSICION_CUADRANTES["Liderazgo"])
-    
-    fig.add_annotation(
-        x=x_riesgo, y=y_riesgo, text="<b>Riesgo</b>", showarrow=False,
-        font=dict(size=18, color="rgba(255,255,255,0.20)")
-    )
-    fig.add_annotation(
-        x=x_crecimiento, y=y_crecimiento, text="<b>Crecimiento<br>con Riesgo</b>", showarrow=False,
-        font=dict(size=18, color="rgba(255,255,255,0.20)")
-    )
-    fig.add_annotation(
-        x=x_conservador, y=y_conservador, text="<b>Conservador</b>", showarrow=False,
-        font=dict(size=18, color="rgba(255,255,255,0.20)")
-    )
-    fig.add_annotation(
-        x=x_liderazgo, y=y_liderazgo, text="<b>Liderazgo</b>", showarrow=False,
-        font=dict(size=18, color="rgba(255,255,255,0.20)")
-    )
+    # Usamos directamente xmax, xmin, ymax, ymin (sin '_view')
+    fig.add_annotation(x=xmax, y=ymax, text=f"<b>{label_q1}</b>", showarrow=False, opacity=0.25, font=dict(size=18, color="white"))
+    fig.add_annotation(x=xmin, y=ymax, text=f"<b>{label_q2}</b>", showarrow=False, opacity=0.25, font=dict(size=18, color="white"))
+    fig.add_annotation(x=xmin, y=ymin, text=f"<b>{label_q3}</b>", showarrow=False, opacity=0.25, font=dict(size=18, color="white"))
+    fig.add_annotation(x=xmax, y=ymin, text=f"<b>{label_q4}</b>", showarrow=False, opacity=0.25, font=dict(size=18, color="white"))
 
     return fig
 
@@ -104,6 +98,18 @@ def crear_dispersion(
         "INSTITUCIONES FINANCIERAS DE DESARROLLO": "#26A69A", # Verde Agua
         "COOPERATIVAS": "#AB47BC"                              # Púrpura / Violeta
     }
+
+    ORDEN_TIPOS = [
+        "BANCOS MULTIPLES",
+        "ENTIDADES ESPECIALIZADAS EN MICROCRÉDITO",
+        "INSTITUCIONES FINANCIERAS DE DESARROLLO",
+        "COOPERATIVAS"
+    ]
+
+    # Convertimos a tipo Categorical para forzar el orden interno
+    if "Tipo Entidad" in df.columns:
+        df["Tipo Entidad"] = pd.Categorical(df["Tipo Entidad"], categories=ORDEN_TIPOS, ordered=True)
+        df = df.sort_values("Tipo Entidad")
     
     fig = px.scatter(
         data_frame=df,
@@ -124,7 +130,7 @@ def crear_dispersion(
         },
         # --- AJUSTES DE COLOR Y ORDEN FIJO ---
         color_discrete_map=MAPA_COLORES,
-        category_orders={color: sorted(list(MAPA_COLORES.keys()))},
+        category_orders={"Tipo Entidad": ORDEN_TIPOS},
         # -----------------------------------
         size_max=TAM_BURBUJA,
         template="plotly_white",
@@ -170,7 +176,7 @@ def crear_dispersion(
         )
 
     if mostrar_cuadrantes:
-        fig = agregar_cuadrantes(fig, xmin_view, xmax_view, ymin_view, ymax_view)
+        fig = agregar_cuadrantes(fig, xmin_view, xmax_view, ymin_view, ymax_view, eje_y=eje_y)
 
     fig.update_traces(
         mode="markers",
