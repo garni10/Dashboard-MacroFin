@@ -25,15 +25,38 @@ def agregar_cuadrantes(fig, xmin, xmax, ymin, ymax, eje_y="Indice de mora"):
         label_q4 = "Liderazgo"              # Inferior Derecho
     else:
         label_q1 = "Liderazgo"              # Superior Derecho
-        label_q2 = "Captador / Expansivo"   # Superior Izquierdo
+        label_q2 = "Captador / Rezago"   # Superior Izquierdo (Ajustado el texto Expansivo)
         label_q3 = "Rezago / Estancado"     # Inferior Izquierdo
         label_q4 = "Otorgador / Descalce"   # Inferior Derecho
 
-    # Usamos directamente xmax, xmin, ymax, ymin (sin '_view')
-    fig.add_annotation(x=xmax, y=ymax, text=f"<b>{label_q1}</b>", showarrow=False, opacity=0.25, font=dict(size=18, color="white"))
-    fig.add_annotation(x=xmin, y=ymax, text=f"<b>{label_q2}</b>", showarrow=False, opacity=0.25, font=dict(size=18, color="white"))
-    fig.add_annotation(x=xmin, y=ymin, text=f"<b>{label_q3}</b>", showarrow=False, opacity=0.25, font=dict(size=18, color="white"))
-    fig.add_annotation(x=xmax, y=ymin, text=f"<b>{label_q4}</b>", showarrow=False, opacity=0.25, font=dict(size=18, color="white"))
+    # Usamos coordenadas relativas 'paper' (0 a 1) para que nunca se corten en los bordes
+    # Superior Derecho (Q1)
+    fig.add_annotation(
+        xref="paper", yref="paper", x=0.98, y=0.98,
+        text=f"<b>{label_q1}</b>", showarrow=False, opacity=0.25,
+        font=dict(size=18, color="white"), xanchor="right", yanchor="top"
+    )
+    
+    # Superior Izquierdo (Q2)
+    fig.add_annotation(
+        xref="paper", yref="paper", x=0.02, y=0.98,
+        text=f"<b>{label_q2}</b>", showarrow=False, opacity=0.25,
+        font=dict(size=18, color="white"), xanchor="left", yanchor="top"
+    )
+    
+    # Inferior Izquierdo (Q3)
+    fig.add_annotation(
+        xref="paper", yref="paper", x=0.02, y=0.02,
+        text=f"<b>{label_q3}</b>", showarrow=False, opacity=0.25,
+        font=dict(size=18, color="white"), xanchor="left", yanchor="bottom"
+    )
+    
+    # Inferior Derecho (Q4)
+    fig.add_annotation(
+        xref="paper", yref="paper", x=0.98, y=0.02,
+        text=f"<b>{label_q4}</b>", showarrow=False, opacity=0.25,
+        font=dict(size=18, color="white"), xanchor="right", yanchor="bottom"
+    )
 
     return fig
 
@@ -43,10 +66,10 @@ def estilo_dashboard(fig):
         plot_bgcolor="#0E1117",
         font=dict(family="Arial", size=14, color="white"),
         title=dict(font=dict(size=22, color="white"), x=0.02),
-        legend=dict(orientation="v", bgcolor="rgba(0,0,0,0)", borderwidth=0, title="Tipo de Entidad"),
-        margin=dict(l=30, r=40, t=70, b=30),
+        legend=dict(orientation="v", yanchor="top", y=0.85, xanchor="left", x=1.02, bgcolor="rgba(0,0,0,0)", borderwidth=0, title="Tipo de Entidad"),
+        margin=dict(l=60, r=40, t=50, b=50),
         hovermode="closest"
-    )
+    )    #leyenda
 
     fig.update_xaxes(
         showgrid=True, gridcolor="rgba(255,255,255,0.12)",

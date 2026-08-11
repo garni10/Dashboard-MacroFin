@@ -72,8 +72,6 @@ div[data-baseweb="tab-highlight"] {
 df_ind_mensual = cargar_indicadores()
 df_ind_diario = cargar_indicadores_diarios()
 
-st.sidebar.markdown("### 🏢 Filtros de Entidades")
-
 # ==========================================
 # FILTROS LATERALES COMPARTIDOS (SIDEBAR)
 # ==========================================
@@ -185,66 +183,90 @@ with tab_mensual:
         # 3. Clasificar entidades filtradas y crear el gráfico
         # Título dinámico para el gráfico
         titulo_m = f"Mensual: Crecimiento Anual de Cartera vs {eje_y_label}"
-        
-        # Clasificación
-        df_analisis_m = clasificar_cuadrantes(df_filtrado_m, eje_x="Crecimiento Cartera", eje_y=var_eje_y)
-        
-        # Creación del gráfico
-        fig_m = crear_dispersion(
-            df=df_analisis_m, 
-            df_historico=df_hist_m,
-            eje_x="Crecimiento Cartera", 
-            eje_y=var_eje_y,                     # <-- Pasa la variable seleccionada
-            tamaño="10. Activo", 
-            color="Tipo Entidad", 
-            texto=COLUMNAS["sigla"],
-            titulo=titulo_m,                     # <-- Título dinámico
-            fecha_actual=estado_m.periodo_actual, 
-            mostrar_trayectorias=False,
-            # Pasamos los promedios del sector para las líneas cruzadas:
-            prom_x_custom=prom_x_m,
-            prom_y_custom=prom_y_m
-        )
 
-        st.plotly_chart(fig_m, use_container_width=True)
+    # -------------------------------------------------------------------------
+    # A. AUTOMATIZACIÓN DEL REPRODUCTOR (Debe ejecutarse antes de clasificar/graficar)
+    # -------------------------------------------------------------------------
+    if st.session_state.get("play_mensual", False):
+        import time
+        time.sleep(0.8)
+        if st.session_state.idx_mensual < len(estado_m.periodos) - 1:
+            st.session_state.idx_mensual += 1
+        else:
+            st.session_state.play_mensual = False
+        st.rerun()
 
-        # Reproductor Mensual
-        c_play, c_slider = st.columns([1, 11])
-        with c_play:
-            btn_lbl = "⏸" if st.session_state.play_mensual else "▶"
-            if st.button(btn_lbl, key="play_m", use_container_width=True):
-                if st.session_state.play_mensual:
-                    st.session_state.play_mensual = False
-                else:
-                    if st.session_state.idx_mensual >= len(estado_m.periodos) - 1:
-                        st.session_state.idx_mensual = 0
-                    st.session_state.play_mensual = True
+    # -------------------------------------------------------------------------
+    # B. CLASIFICACIÓN DE CUADRANTES
+    # -------------------------------------------------------------------------
+    df_analisis_m = clasificar_cuadrantes(
+        df_filtrado_m, 
+        eje_x="Crecimiento Cartera", 
+        eje_y=var_eje_y, 
+        prom_x=prom_x_m, 
+        prom_y=prom_y_m
+    )
+
+    # -------------------------------------------------------------------------
+    # C. CREACIÓN Y DESPLIEGUE DEL GRÁFICO
+    # -------------------------------------------------------------------------
+    fig_m = crear_dispersion(
+        df=df_analisis_m,
+        df_historico=df_hist_m,
+        eje_x="Crecimiento Cartera",
+        eje_y=var_eje_y,
+        tamaño="10. Activo",
+        color="Tipo Entidad",
+        texto=COLUMNAS["sigla"],
+        titulo=titulo_m,
+        fecha_actual=estado_m.periodo_actual,
+        mostrar_trayectorias=False,
+        prom_x_custom=prom_x_m,
+        prom_y_custom=prom_y_m
+    )
+    
+    st.plotly_chart(fig_m, use_container_width=True)
+
+    # -------------------------------------------------------------------------
+    # D. DIBUJAR REPRODUCTOR Y SLIDER (AHORA QUEDAN DEBAJO DEL GRÁFICO)
+    # -------------------------------------------------------------------------
+    c_play, c_slider = st.columns([1, 11])
+    
+    with c_play:
+        btn_lbl = "❚❚" if st.session_state.play_mensual else "►"
+        if st.button(btn_lbl, key="play_m", use_container_width=True):
+            if st.session_state.play_mensual:
+                st.session_state.play_mensual = False
+            else:
+                if st.session_state.idx_mensual >= len(estado_m.periodos) - 1:
+                    st.session_state.idx_mensual = 0
+                st.session_state.play_mensual = True
+            st.rerun()
+
+    with c_slider:
+        if estado_m.periodos:
+            f_sl = st.select_slider(
+                "P_M",
+                options=estado_m.periodos,
+                value=estado_m.periodos[st.session_state.idx_mensual],
+                format_func=lambda x: x.strftime("%Y-%m"),
+                key="sl_m",
+                label_visibility="collapsed"
+            )
+            idx_s = estado_m.periodos.index(f_sl)
+            if idx_s != st.session_state.idx_mensual and not st.session_state.play_mensual:
+                st.session_state.idx_mensual = idx_s
                 st.rerun()
 
-        with c_slider:
-            if estado_m.periodos:
-                f_sl = st.select_slider(
-                    "P_M", options=estado_m.periodos,
-                    value=estado_m.periodos[st.session_state.idx_mensual],
-                    format_func=lambda x: x.strftime("%Y-%m"),
-                    key="sl_m", label_visibility="collapsed"
-                )
-                idx_s = estado_m.periodos.index(f_sl)
-                if idx_s != st.session_state.idx_mensual and not st.session_state.play_mensual:
-                    st.session_state.idx_mensual = idx_s
-                    st.rerun()
+    # -------------------------------------------------------------------------
+    # E. DIAGNÓSTICO INTELIGENTE Y RESUMEN DEL PERÍODO
+    # -------------------------------------------------------------------------
+    resumen_texto_m = generar_resumen_inteligente(df_analisis_m, eje_y_label, var_eje_y)
+    st.markdown(resumen_texto_m)
 
-
-
-        # 1. Diagnóstico Inteligente
-        resumen_texto_m = generar_resumen_inteligente(df_analisis_m, eje_y_label, var_eje_y)
-        st.markdown(resumen_texto_m)
-        
-        # 2. Resumen del Período (Tabla / Tarjetas)
-        st.markdown("### 🧠 Resumen del período")
-        for fila in resumen_periodo(df_analisis_m):
-            st.write(f"• {fila['Cantidad']} entidades ({fila['Porcentaje']:.1f}%) en **{fila['Estado']}**.")
-
+    st.markdown("### 🧠 Resumen del período")
+    for fila in resumen_periodo(df_analisis_m):
+        st.write(f"• {fila['Cantidad']} entidades ({fila['Porcentaje']:.1f}%) en **{fila['Estado']}**.")
 
 # ==========================================
 # PESTAÑA 2: VISIÓN DIARIA (2026)
@@ -286,61 +308,89 @@ with tab_diario:
         # 3. Clasificar entidades filtradas y crear el gráfico
         # Título dinámico para el gráfico
         titulo_d = f"Diario: Crecimiento Anual de Cartera vs {eje_y_label} (2026)"
-        # Clasificación
-        df_analisis_d = clasificar_cuadrantes(df_filtrado_d, eje_x="Crecimiento Cartera", eje_y=var_eje_y)
-        
-        fig_d = crear_dispersion(
-            df=df_analisis_d, 
-            df_historico=df_hist_d,
-            eje_x="Crecimiento Cartera", 
-            eje_y=var_eje_y,
-            tamaño="10. Activo", 
-            color="Tipo Entidad", 
-            texto=COLUMNAS["sigla"],
-            titulo=titulo_d,
-            fecha_actual=estado_d.periodo_actual, 
-            mostrar_trayectorias=False,
-            # Pasamos los promedios del sector para las líneas cruzadas:
-            prom_x_custom=prom_x_d,
-            prom_y_custom=prom_y_d
-        )
-        st.plotly_chart(fig_d, use_container_width=True)
+    # -------------------------------------------------------------------------
+    # A. AUTOMATIZACIÓN DEL REPRODUCTOR (Debe ejecutarse antes de clasificar/graficar)
+    # -------------------------------------------------------------------------
+    if st.session_state.get("play_diario", False):
+        import time
+        time.sleep(0.8)
+        if st.session_state.idx_diario < len(estado_m.periodos) - 1:
+            st.session_state.idx_diario += 1
+        else:
+            st.session_state.play_diario = False
+        st.rerun()
 
-        # Reproductor Diario
-        c_play_d, c_slider_d = st.columns([1, 11])
-        with c_play_d:
-            btn_lbl_d = "⏸" if st.session_state.play_diario else "▶"
-            if st.button(btn_lbl_d, key="play_d", use_container_width=True):
-                if st.session_state.play_diario:
-                    st.session_state.play_diario = False
-                else:
-                    if st.session_state.idx_diario >= len(estado_d.periodos) - 1:
-                        st.session_state.idx_diario = 0
-                    st.session_state.play_diario = True
+    # -------------------------------------------------------------------------
+    # B. CLASIFICACIÓN DE CUADRANTES
+    # -------------------------------------------------------------------------
+    df_analisis_d = clasificar_cuadrantes(
+        df_filtrado_d, 
+        eje_x="Crecimiento Cartera", 
+        eje_y=var_eje_y, 
+        prom_x=prom_x_d, 
+        prom_y=prom_y_d
+    )
+
+    # -------------------------------------------------------------------------
+    # C. CREACIÓN Y DESPLIEGUE DEL GRÁFICO
+    # -------------------------------------------------------------------------
+    fig_d = crear_dispersion(
+        df=df_analisis_d,
+        df_historico=df_hist_d,
+        eje_x="Crecimiento Cartera",
+        eje_y=var_eje_y,
+        tamaño="10. Activo",
+        color="Tipo Entidad",
+        texto=COLUMNAS["sigla"],
+        titulo=titulo_d,
+        fecha_actual=estado_d.periodo_actual,
+        mostrar_trayectorias=False,
+        prom_x_custom=prom_x_d,
+        prom_y_custom=prom_y_d
+    )
+    
+    st.plotly_chart(fig_d, use_container_width=True)
+
+    # -------------------------------------------------------------------------
+    # D. DIBUJAR REPRODUCTOR Y SLIDER (AHORA QUEDAN DEBAJO DEL GRÁFICO)
+    # -------------------------------------------------------------------------
+    c_play, c_slider = st.columns([1, 11])
+    
+    with c_play:
+        btn_lbl = "❚❚" if st.session_state.play_diario else "►"
+        if st.button(btn_lbl, key="play_d", use_container_width=True):
+            if st.session_state.play_diario:
+                st.session_state.play_diario = False
+            else:
+                if st.session_state.idx_diario >= len(estado_d.periodos) - 1:
+                    st.session_state.idx_diario = 0
+                st.session_state.play_diario = True
+            st.rerun()
+
+    with c_slider:
+        if estado_d.periodos:
+            f_sl = st.select_slider(
+                "P_M",
+                options=estado_d.periodos,
+                value=estado_d.periodos[st.session_state.idx_diario],
+                format_func=lambda x: x.strftime("%Y-%m"),
+                key="sl_d",
+                label_visibility="collapsed"
+            )
+            idx_s = estado_d.periodos.index(f_sl)
+            if idx_s != st.session_state.idx_diario and not st.session_state.play_diario:
+                st.session_state.idx_diario = idx_s
                 st.rerun()
 
-        with c_slider_d:
-            if estado_d.periodos:
-                f_sl_d = st.select_slider(
-                    "P_D", options=estado_d.periodos,
-                    value=estado_d.periodos[st.session_state.idx_diario],
-                    format_func=lambda x: x.strftime("%d/%m/%Y"),
-                    key="sl_d", label_visibility="collapsed"
-                )
-                idx_s_d = estado_d.periodos.index(f_sl_d)
-                if idx_s_d != st.session_state.idx_diario and not st.session_state.play_diario:
-                    st.session_state.idx_diario = idx_s_d
-                    st.rerun()
+    # -------------------------------------------------------------------------
+    # E. DIAGNÓSTICO INTELIGENTE Y RESUMEN DEL PERÍODO
+    # -------------------------------------------------------------------------
+    resumen_texto_d = generar_resumen_inteligente(df_analisis_d, eje_y_label, var_eje_y)
+    st.markdown(resumen_texto_d)
 
-        # 1. Diagnóstico Inteligente
-        resumen_texto_d = generar_resumen_inteligente(df_analisis_d, eje_y_label, var_eje_y)
-        st.markdown(resumen_texto_d)
-        
-        # 2. Resumen del Período (Tabla / Tarjetas)
-        st.markdown("### 🧠 Resumen del período")
-        for fila in resumen_periodo(df_analisis_d):
-            st.write(f"• {fila['Cantidad']} entidades ({fila['Porcentaje']:.1f}%) en **{fila['Estado']}**.")
-
+    st.markdown("### 🧠 Resumen del período")
+    for fila in resumen_periodo(df_analisis_d):
+        st.write(f"• {fila['Cantidad']} entidades ({fila['Porcentaje']:.1f}%) en **{fila['Estado']}**.")
 
 
 

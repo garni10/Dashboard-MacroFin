@@ -5,47 +5,41 @@
 
 import pandas as pd
 from modules.config import CUADRANTES
-def clasificar_cuadrantes(df, eje_x="Crecimiento Cartera", eje_y="Indice de mora"):
-    """
-    Clasifica cada entidad en un cuadrante en función de los promedios de los ejes X e Y.
-    Soporta lógica adaptativa según la variable elegida para el eje Y.
-    """
-    if df.empty or eje_x not in df.columns or eje_y not in df.columns:
+def clasificar_cuadrantes(df, eje_x, eje_y, prom_x=None, prom_y=None):
+    if df.empty:
         return df
 
-    prom_x = df[eje_x].mean()
-    prom_y = df[eje_y].mean()
+    # Si se pasan los promedios del periodo los usa, de lo contrario calcula la media del dataframe
+    threshold_x = prom_x if prom_x is not None else df[eje_x].mean()
+    threshold_y = prom_y if prom_y is not None else df[eje_y].mean()
 
-    def determinar_cuadrante(row):
-        val_x = row[eje_x]
-        val_y = row[eje_y]
+    def obtener_cuadrante(row):
+        x = row[eje_x]
+        y = row[eje_y]
 
-        if pd.isna(val_x) or pd.isna(val_y):
-            return "Sin datos"
-
-        # MATRIZ 1: Cartera vs Índice de Mora
-        if eje_y == "Indice de mora":
-            if val_x >= prom_x and val_y < prom_y:
-                return "Liderazgo"            # Q4: Alto Crecimiento, Baja Mora
-            elif val_x >= prom_x and val_y >= prom_y:
-                return "Crecimiento con Riesgo" # Q1: Alto Crecimiento, Alta Mora
-            elif val_x < prom_x and val_y >= prom_y:
-                return "Riesgo"               # Q2: Bajo Crecimiento, Alta Mora
+        # Validamos si es la variable de mora o de crecimiento
+        if "Mora" in eje_y or "mora" in eje_y:
+            # Para Mora: Menor que el promedio es BUENO (abajo)
+            if x >= threshold_x and y <= threshold_y:
+                return "Liderazgo"
+            elif x < threshold_x and y <= threshold_y:
+                return "Conservador"
+            elif x < threshold_x and y > threshold_y:
+                return "Riesgo"
             else:
-                return "Conservador"          # Q3: Bajo Crecimiento, Baja Mora
-
-        # MATRIZ 2: Cartera vs Crecimiento Depósitos (u otras tasas de crecimiento)
+                return "Crecimiento con Riesgo"
         else:
-            if val_x >= prom_x and val_y >= prom_y:
-                return "Liderazgo"            # Q1: Alto Crec. Cartera, Alto Crec. Depósitos
-            elif val_x < prom_x and val_y >= prom_y:
-                return "Captador / Expansivo" # Q2: Bajo Crec. Cartera, Alto Crec. Depósitos
-            elif val_x < prom_x and val_y < prom_y:
-                return "Rezago / Estancado"   # Q3: Bajo Crec. Cartera, Bajo Crec. Depósitos
+            # Para Crecimientos (Depósitos, Activos, etc.): Mayor que el promedio es BUENO (arriba)
+            if x >= threshold_x and y >= threshold_y:
+                return "Liderazgo"
+            elif x < threshold_x and y >= threshold_y:
+                return "Captador / Rezago"
+            elif x < threshold_x and y < threshold_y:
+                return "Rezago / Estancado"
             else:
-                return "Otorgador / Descalce" # Q4: Alto Crec. Cartera, Bajo Crec. Depósitos
+                return "Otorgador / Descalce"
 
-    df["Cuadrante"] = df.apply(determinar_cuadrante, axis=1)
+    df["Cuadrante"] = df.apply(obtener_cuadrante, axis=1)
     return df
 
 def generar_resumen_inteligente(df_analisis, eje_y_label, variable_y):
