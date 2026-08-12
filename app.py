@@ -378,7 +378,7 @@ with tab_diario:
                 "P_D",
                 options=estado_d.periodos,
                 value=estado_d.periodos[st.session_state.idx_diario],
-                format_func=lambda x: x.strftime("%Y-%m"),
+                format_func=lambda x: x.strftime("%d/%m/%Y"),
                 key="sl_d",
                 label_visibility="collapsed"
             )
