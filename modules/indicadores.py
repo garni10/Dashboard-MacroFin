@@ -125,7 +125,7 @@ def cargar_indicadores():
 
     return df
 
-@st.cache_data
+@st.cache_data(ttl=0)
 def cargar_indicadores_diarios():
     """
     Carga, limpia y calcula indicadores diarios alineando las fechas de 2026 
