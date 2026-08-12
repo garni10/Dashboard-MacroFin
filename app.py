@@ -72,6 +72,10 @@ div[data-baseweb="tab-highlight"] {
 df_ind_mensual = cargar_indicadores()
 df_ind_diario = cargar_indicadores_diarios()
 
+#st.write(df_ind_diario.shape)
+#st.write(df_ind_diario["Fecha"].min())
+#st.write(df_ind_diario["Fecha"].max())
+#st.write(df_ind_diario.tail())
 # ==========================================
 # FILTROS LATERALES COMPARTIDOS (SIDEBAR)
 # ==========================================
@@ -314,7 +318,7 @@ with tab_diario:
     if st.session_state.get("play_diario", False):
         import time
         time.sleep(0.8)
-        if st.session_state.idx_diario < len(estado_m.periodos) - 1:
+        if st.session_state.idx_diario < len(estado_d.periodos) - 1:
             st.session_state.idx_diario += 1
         else:
             st.session_state.play_diario = False
@@ -370,7 +374,7 @@ with tab_diario:
     with c_slider:
         if estado_d.periodos:
             f_sl = st.select_slider(
-                "P_M",
+                "P_D",
                 options=estado_d.periodos,
                 value=estado_d.periodos[st.session_state.idx_diario],
                 format_func=lambda x: x.strftime("%Y-%m"),
