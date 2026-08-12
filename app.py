@@ -76,6 +76,7 @@ df_ind_diario = cargar_indicadores_diarios()
 #st.write(df_ind_diario["Fecha"].min())
 #st.write(df_ind_diario["Fecha"].max())
 #st.write(df_ind_diario.tail())
+
 # ==========================================
 # FILTROS LATERALES COMPARTIDOS (SIDEBAR)
 # ==========================================
